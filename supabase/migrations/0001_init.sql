@@ -50,3 +50,6 @@ using (
 with check (
   exists (select 1 from shops where shops.id = expenses.shop_id and shops.owner_id = auth.uid())
 );
+grant select, insert, update, delete on public.shops to authenticated;
+grant select, insert, update, delete on public.daily_entries to authenticated;
+grant select, insert, update, delete on public.expenses to authenticated;
