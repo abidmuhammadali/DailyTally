@@ -19,8 +19,23 @@ const entrySchema = z.object({
     .optional()
     .or(z.literal('')),
 })
-
 type EntryForm = z.infer<typeof entrySchema>
+
+const expenseSchema = z.object({
+  expense_date: z
+    .string()
+    .min(1, 'Date is required')
+    .refine((d) => new Date(d) <= new Date(), 'Date cannot be in the future'),
+  category: z.enum(['rent', 'bills', 'salary', 'restocking', 'other']),
+  amount: z.coerce.number().min(0, 'Amount cannot be negative'),
+  note: z.string().optional(),
+})
+type ExpenseForm = z.infer<typeof expenseSchema>
+
+function currentMonthStart() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+}
 
 export default function ShopDetail() {
   const { id: shopId } = useParams()
@@ -35,6 +50,27 @@ export default function ShopDetail() {
       return data
     },
   })
+
+  const { data: summary } = useQuery({
+    queryKey: ['monthly_summary', shopId, currentMonthStart()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('monthly_summaries')
+        .select('*')
+        .eq('shop_id', shopId)
+        .eq('month', currentMonthStart())
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+  })
+
+  const recalcSummary = async () => {
+    await supabase.functions.invoke('recalc-summary', {
+      body: { shop_id: shopId, month: currentMonthStart() },
+    })
+    queryClient.invalidateQueries({ queryKey: ['monthly_summary', shopId, currentMonthStart()] })
+  }
 
   const {
     register,
@@ -60,9 +96,36 @@ export default function ShopDetail() {
       )
       if (error) throw error
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       reset({ entry_date: new Date().toISOString().split('T')[0] })
-      queryClient.invalidateQueries({ queryKey: ['daily_entries', shopId] })
+      await recalcSummary()
+    },
+  })
+
+  const {
+    register: registerExpense,
+    handleSubmit: handleExpenseSubmit,
+    reset: resetExpense,
+    formState: { errors: expenseErrors, isSubmitting: expenseSubmitting },
+  } = useForm<ExpenseForm>({
+    resolver: zodResolver(expenseSchema),
+    defaultValues: { expense_date: new Date().toISOString().split('T')[0], category: 'rent' },
+  })
+
+  const saveExpense = useMutation({
+    mutationFn: async (formData: ExpenseForm) => {
+      const { error } = await supabase.from('expenses').insert({
+        shop_id: shopId,
+        expense_date: formData.expense_date,
+        category: formData.category,
+        amount: formData.amount,
+        note: formData.note || null,
+      })
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      resetExpense({ expense_date: new Date().toISOString().split('T')[0], category: 'rent' })
+      await recalcSummary()
     },
   })
 
@@ -82,68 +145,147 @@ export default function ShopDetail() {
         ← Back to Shops
       </Link>
 
-      <h2 className="text-xl font-bold text-[#1F2D3D] mb-6">{shop?.name ?? 'Loading...'}</h2>
+      <h2 className="text-xl font-bold text-[#1F2D3D] mb-2">{shop?.name ?? 'Loading...'}</h2>
 
-      <form
-        onSubmit={handleSubmit((data) => saveEntry.mutate(data))}
-        className="bg-white p-6 rounded border border-gray-200 max-w-md"
-      >
-        <h3 className="font-medium text-[#1F2D3D] mb-4">Log Today's Sales</h3>
-
-        {saveEntry.isError && (
-          <p className="text-sm text-[#B5482A] bg-red-50 border border-red-200 rounded p-2 mb-4">
-            {(saveEntry.error as Error).message}
+      {summary && (
+        <div className="bg-white border border-gray-200 rounded p-4 mb-6 max-w-md">
+          <p className="text-sm text-[#6B7785] mb-1">This month's profit</p>
+          <p className="text-2xl font-bold text-[#2F6F4E]">Rs. {Number(summary.profit).toLocaleString()}</p>
+          <p className="text-xs text-[#6B7785] mt-1">
+            Revenue: Rs. {Number(summary.total_revenue).toLocaleString()} — Expenses: Rs.{' '}
+            {Number(summary.total_expenses).toLocaleString()}
           </p>
-        )}
-        {saveEntry.isSuccess && (
-          <p className="text-sm text-[#2F6F4E] bg-green-50 border border-green-200 rounded p-2 mb-4">
-            Saved successfully.
-          </p>
-        )}
+        </div>
+      )}
 
-        <label className="block text-sm text-[#6B7785] mb-1">Date</label>
-        <input type="date" {...register('entry_date')} className="w-full border border-gray-300 rounded p-2 mb-1" />
-        {errors.entry_date && <p className="text-xs text-[#B5482A] mb-3">{errors.entry_date.message}</p>}
-
-        <label className="block text-sm text-[#6B7785] mb-1 mt-3">Cash Received</label>
-        <input
-          type="number"
-          step="0.01"
-          {...register('cash_amount')}
-          className="w-full border border-gray-300 rounded p-2 mb-1"
-        />
-        {errors.cash_amount && <p className="text-xs text-[#B5482A] mb-3">{errors.cash_amount.message}</p>}
-
-        <label className="block text-sm text-[#6B7785] mb-1 mt-3">Online Received</label>
-        <input
-          type="number"
-          step="0.01"
-          {...register('online_amount')}
-          className="w-full border border-gray-300 rounded p-2 mb-1"
-        />
-        {errors.online_amount && <p className="text-xs text-[#B5482A] mb-3">{errors.online_amount.message}</p>}
-
-        <label className="block text-sm text-[#6B7785] mb-1 mt-3">
-          Total Sale Value <span className="text-[#6B7785]">(optional, for credit/udhaar)</span>
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          {...register('total_sale_amount')}
-          className="w-full border border-gray-300 rounded p-2 mb-1"
-        />
-        {errors.total_sale_amount && (
-          <p className="text-xs text-[#B5482A] mb-3">{errors.total_sale_amount.message}</p>
-        )}
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-[#2F6F4E] text-white rounded p-2 font-medium disabled:opacity-50 mt-4"
+      <div className="flex flex-col md:flex-row gap-6">
+        <form
+          onSubmit={handleSubmit((data) => saveEntry.mutate(data))}
+          className="bg-white p-6 rounded border border-gray-200 max-w-md w-full"
         >
-          {isSubmitting ? 'Saving...' : 'Save Entry'}
-        </button>
-      </form>
+          <h3 className="font-medium text-[#1F2D3D] mb-4">Log Today's Sales</h3>
+
+          {saveEntry.isError && (
+            <p className="text-sm text-[#B5482A] bg-red-50 border border-red-200 rounded p-2 mb-4">
+              {(saveEntry.error as Error).message}
+            </p>
+          )}
+          {saveEntry.isSuccess && (
+            <p className="text-sm text-[#2F6F4E] bg-green-50 border border-green-200 rounded p-2 mb-4">
+              Saved successfully.
+            </p>
+          )}
+
+          <label className="block text-sm text-[#6B7785] mb-1">Date</label>
+          <input type="date" {...register('entry_date')} className="w-full border border-gray-300 rounded p-2 mb-1" />
+          {errors.entry_date && <p className="text-xs text-[#B5482A] mb-3">{errors.entry_date.message}</p>}
+
+          <label className="block text-sm text-[#6B7785] mb-1 mt-3">Cash Received</label>
+          <input
+            type="number"
+            step="0.01"
+            {...register('cash_amount')}
+            className="w-full border border-gray-300 rounded p-2 mb-1"
+          />
+          {errors.cash_amount && <p className="text-xs text-[#B5482A] mb-3">{errors.cash_amount.message}</p>}
+
+          <label className="block text-sm text-[#6B7785] mb-1 mt-3">Online Received</label>
+          <input
+            type="number"
+            step="0.01"
+            {...register('online_amount')}
+            className="w-full border border-gray-300 rounded p-2 mb-1"
+          />
+          {errors.online_amount && <p className="text-xs text-[#B5482A] mb-3">{errors.online_amount.message}</p>}
+
+          <label className="block text-sm text-[#6B7785] mb-1 mt-3">
+            Total Sale Value <span className="text-[#6B7785]">(optional, for credit/udhaar)</span>
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            {...register('total_sale_amount')}
+            className="w-full border border-gray-300 rounded p-2 mb-1"
+          />
+          {errors.total_sale_amount && (
+            <p className="text-xs text-[#B5482A] mb-3">{errors.total_sale_amount.message}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-[#2F6F4E] text-white rounded p-2 font-medium disabled:opacity-50 mt-4"
+          >
+            {isSubmitting ? 'Saving...' : 'Save Entry'}
+          </button>
+        </form>
+
+        <form
+          onSubmit={handleExpenseSubmit((data) => saveExpense.mutate(data))}
+          className="bg-white p-6 rounded border border-gray-200 max-w-md w-full"
+        >
+          <h3 className="font-medium text-[#1F2D3D] mb-4">Log an Expense</h3>
+
+          {saveExpense.isError && (
+            <p className="text-sm text-[#B5482A] bg-red-50 border border-red-200 rounded p-2 mb-4">
+              {(saveExpense.error as Error).message}
+            </p>
+          )}
+          {saveExpense.isSuccess && (
+            <p className="text-sm text-[#2F6F4E] bg-green-50 border border-green-200 rounded p-2 mb-4">
+              Saved successfully.
+            </p>
+          )}
+
+          <label className="block text-sm text-[#6B7785] mb-1">Date</label>
+          <input
+            type="date"
+            {...registerExpense('expense_date')}
+            className="w-full border border-gray-300 rounded p-2 mb-1"
+          />
+          {expenseErrors.expense_date && (
+            <p className="text-xs text-[#B5482A] mb-3">{expenseErrors.expense_date.message}</p>
+          )}
+
+          <label className="block text-sm text-[#6B7785] mb-1 mt-3">Category</label>
+          <select
+            {...registerExpense('category')}
+            className="w-full border border-gray-300 rounded p-2 mb-1"
+          >
+            <option value="rent">Rent</option>
+            <option value="bills">Bills</option>
+            <option value="salary">Salary</option>
+            <option value="restocking">Restocking</option>
+            <option value="other">Other</option>
+          </select>
+
+          <label className="block text-sm text-[#6B7785] mb-1 mt-3">Amount</label>
+          <input
+            type="number"
+            step="0.01"
+            {...registerExpense('amount')}
+            className="w-full border border-gray-300 rounded p-2 mb-1"
+          />
+          {expenseErrors.amount && <p className="text-xs text-[#B5482A] mb-3">{expenseErrors.amount.message}</p>}
+
+          <label className="block text-sm text-[#6B7785] mb-1 mt-3">
+            Note <span className="text-[#6B7785]">(optional)</span>
+          </label>
+          <input
+            type="text"
+            {...registerExpense('note')}
+            className="w-full border border-gray-300 rounded p-2 mb-1"
+          />
+
+          <button
+            type="submit"
+            disabled={expenseSubmitting}
+            className="w-full bg-[#2F6F4E] text-white rounded p-2 font-medium disabled:opacity-50 mt-4"
+          >
+            {expenseSubmitting ? 'Saving...' : 'Save Expense'}
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
