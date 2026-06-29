@@ -1,4 +1,4 @@
-// src/pages/ShopDetail.tsx
+// src/pages/ShopExpenses.tsx
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
@@ -8,44 +8,49 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
-const entrySchema = z.object({
-  entry_date: z
+const expenseSchema = z.object({
+  expense_date: z
     .string()
     .min(1, 'Date is required')
     .refine((d) => new Date(d) <= new Date(), 'Date cannot be in the future'),
-  cash_amount: z.coerce.number().min(0, 'Cash amount cannot be negative'),
-  online_amount: z.coerce.number().min(0, 'Online amount cannot be negative'),
-  total_sale_amount: z.coerce
-    .number()
-    .min(0, 'Total sale amount cannot be negative')
-    .optional()
-    .or(z.literal('')),
+  category: z.enum(['rent', 'bills', 'salary', 'restocking', 'other']),
+  amount: z.coerce.number().min(0, 'Amount cannot be negative'),
+  note: z.string().optional(),
 })
-type EntryForm = z.input<typeof entrySchema>
+type ExpenseForm = z.input<typeof expenseSchema>
 
 function currentMonthStart() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-function daysAgo(n: number) {
+// Fixed minor date boundary offset issue
+function monthsAgo(n: number) {
   const d = new Date()
-  d.setDate(d.getDate() - n)
+  d.setMonth(d.getMonth() - n)
+  d.setDate(1)
   return d.toISOString().split('T')[0]
 }
 
-const dayFilters = [
-  { label: 'Last 5 days', value: 5 },
-  { label: 'Last 10 days', value: 10 },
-  { label: 'Last 15 days', value: 15 },
+const rangeFilters = [
+  { label: 'This month', value: 1 },
+  { label: 'Last 3 months', value: 3 },
   { label: 'All time', value: 0 },
 ]
 
-export default function ShopDetail() {
+const categoryLabels: Record<string, string> = {
+  rent: 'Rent',
+  bills: 'Bills',
+  salary: 'Salary',
+  restocking: 'Restocking',
+  other: 'Miscellaneous',
+}
+
+export default function ShopExpenses() {
   const { id: shopId } = useParams()
   const { user, signOut } = useAuth()
   const queryClient = useQueryClient()
-  const [historyFilter, setHistoryFilter] = useState(10)
+  const [rangeFilter, setRangeFilter] = useState(3)
 
   const { data: shop } = useQuery({
     queryKey: ['shop', shopId],
@@ -56,31 +61,17 @@ export default function ShopDetail() {
     },
   })
 
-  const { data: summary } = useQuery({
-    queryKey: ['monthly_summary', shopId, currentMonthStart()],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('monthly_summaries')
-        .select('*')
-        .eq('shop_id', shopId)
-        .eq('month', currentMonthStart())
-        .maybeSingle()
-      if (error) throw error
-      return data
-    },
-  })
-
   const { data: history } = useQuery({
-    queryKey: ['daily_entries_history', shopId, historyFilter],
+    queryKey: ['expenses_history', shopId, rangeFilter],
     queryFn: async () => {
       let query = supabase
-        .from('daily_entries')
+        .from('expenses')
         .select('*')
         .eq('shop_id', shopId)
-        .order('entry_date', { ascending: false })
+        .order('expense_date', { ascending: false })
 
-      if (historyFilter > 0) {
-        query = query.gte('entry_date', daysAgo(historyFilter))
+      if (rangeFilter > 0) {
+        query = query.gte('expense_date', monthsAgo(rangeFilter))
       }
 
       const { data, error } = await query
@@ -101,31 +92,30 @@ export default function ShopDetail() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<EntryForm>({
-    resolver: zodResolver(entrySchema),
-    defaultValues: { entry_date: new Date().toISOString().split('T')[0] },
+  } = useForm<ExpenseForm>({
+    resolver: zodResolver(expenseSchema),
+    defaultValues: { expense_date: new Date().toISOString().split('T')[0], category: 'rent' },
   })
 
-  const saveEntry = useMutation({
-    mutationFn: async (formData: EntryForm) => {
-      const { error } = await supabase.from('daily_entries').upsert(
-        {
-          shop_id: shopId,
-          entry_date: formData.entry_date,
-          cash_amount: formData.cash_amount,
-          online_amount: formData.online_amount,
-          total_sale_amount: formData.total_sale_amount || null,
-        },
-        { onConflict: 'shop_id,entry_date' }
-      )
+  const saveExpense = useMutation({
+    mutationFn: async (formData: ExpenseForm) => {
+      const { error } = await supabase.from('expenses').insert({
+        shop_id: shopId,
+        expense_date: formData.expense_date,
+        category: formData.category,
+        amount: formData.amount,
+        note: formData.note || null,
+      })
       if (error) throw error
     },
     onSuccess: async () => {
-      reset({ entry_date: new Date().toISOString().split('T')[0] })
-      queryClient.invalidateQueries({ queryKey: ['daily_entries_history', shopId] })
+      reset({ expense_date: new Date().toISOString().split('T')[0], category: 'rent' })
+      queryClient.invalidateQueries({ queryKey: ['expenses_history', shopId] })
       await recalcSummary()
     },
   })
+
+  const totalInRange = history?.reduce((sum, e) => sum + Number(e.amount), 0) ?? 0
 
   return (
     <div className="min-h-screen bg-[#C9974C] p-6 md:p-10 font-inter">
@@ -157,7 +147,7 @@ export default function ShopDetail() {
         </div>
       </header>
 
-      {/* SUB-HEADER ACTIONS */}
+      {/* SUB-HEADER NAVIGATION */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <Link to="/shops" className="text-sm font-bold text-[#1F2D3D] hover:underline inline-flex items-center gap-1 mb-2">
@@ -166,45 +156,36 @@ export default function ShopDetail() {
           <h2 className="text-2xl font-cabinet font-bold text-[#1F2D3D]">{shop?.name ?? 'Loading...'}</h2>
         </div>
 
-        {/* TAB NAVIGATION SELECTORS */}
+        {/* BRUTALIST TAB CONTROLS */}
         <div style={{ boxShadow: '3px 3px 0px 0px #1F2D3D' }} className="inline-flex bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl overflow-hidden self-start">
-          <span className="px-4 py-2 font-cabinet font-bold text-sm bg-[#1F2D3D] text-white">Daily Sales</span>
-          <Link to={`/shops/${shopId}/expenses`} className="px-4 py-2 font-cabinet font-bold text-sm text-[#6B7785] bg-[#FFF8E7] border-l-2 border-[#1F2D3D] hover:bg-[#E2DCD0]">
-            Expenses
+          <Link to={`/shops/${shopId}`} className="px-4 py-2 font-cabinet font-bold text-sm text-[#6B7785] bg-[#FFF8E7] hover:bg-[#E2DCD0]">
+            Daily Sales
           </Link>
+          <span className="px-4 py-2 font-cabinet font-bold text-sm bg-[#1F2D3D] text-white border-l-2 border-[#1F2D3D]">
+            Expenses
+          </span>
         </div>
       </div>
 
-      {/* MONTHLY SUMMARY CARD */}
-      {summary && (
-        <div style={{ boxShadow: '5px 5px 0px 0px #1F2D3D' }} className="bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-5 mb-8 max-w-md">
-          <p className="text-xs font-bold uppercase tracking-wider text-[#6B7785] mb-1">This month's profit</p>
-          <p className="text-2xl font-bold text-[#2F6F4E]">Rs. {Number(summary.profit).toLocaleString()}</p>
-          <p className="text-xs font-bold text-[#1F2D3D] opacity-80 mt-2 border-t border-[#E2DCD0] pt-2">
-            Revenue: Rs. {Number(summary.total_revenue).toLocaleString()} — Expenses: Rs. {Number(summary.total_expenses).toLocaleString()}
-          </p>
-        </div>
-      )}
-
-      {/* TWO COLUMN INTERACTIVE BODY */}
+      {/* TWO COLUMN CONTENT WORKING SPLIT */}
       <div className="flex flex-col lg:flex-row gap-8 items-start">
         
-        {/* LOG FORM CONTAINER */}
+        {/* EXPENSE LOG FORM */}
         <form
-          onSubmit={handleSubmit((data) => saveEntry.mutate(data))}
+          onSubmit={handleSubmit((data) => saveExpense.mutate(data))}
           style={{ boxShadow: '5px 5px 0px 0px #1F2D3D' }}
           className="bg-[#FFF8E7] p-6 rounded-xl border-2 border-[#1F2D3D] max-w-md w-full space-y-4"
         >
           <h3 className="font-cabinet font-bold text-lg text-[#1F2D3D] uppercase tracking-wide border-b-2 border-[#1F2D3D] pb-2">
-            Log Today's Sales
+            Log an Expense
           </h3>
 
-          {saveEntry.isError && (
+          {saveExpense.isError && (
             <p className="text-sm font-bold text-[#B5482A] bg-red-50 border-2 border-[#B5482A] rounded-lg p-2.5">
-              {(saveEntry.error as Error).message}
+              {(saveExpense.error as Error).message}
             </p>
           )}
-          {saveEntry.isSuccess && (
+          {saveExpense.isSuccess && (
             <p className="text-sm font-bold text-[#2F6F4E] bg-green-50 border-2 border-[#2F6F4E] rounded-lg p-2.5">
               Saved successfully.
             </p>
@@ -212,45 +193,51 @@ export default function ShopDetail() {
 
           <div>
             <label className="block text-xs font-bold text-[#1F2D3D] uppercase mb-1">Date</label>
-            <input type="date" {...register('entry_date')} className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none" />
-            {errors.entry_date && <p className="text-xs font-bold text-[#B5482A] mt-1">{errors.entry_date.message}</p>}
+            <input 
+              type="date" 
+              {...register('expense_date')} 
+              className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none" 
+            />
+            {errors.expense_date && <p className="text-xs font-bold text-[#B5482A] mt-1">{errors.expense_date.message}</p>}
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#1F2D3D] uppercase mb-1">Cash Received (Rs.)</label>
-            <input
-              type="number"
-              step="0.01"
-              {...register('cash_amount')}
-              className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none"
-            />
-            {errors.cash_amount && <p className="text-xs font-bold text-[#B5482A] mt-1">{errors.cash_amount.message}</p>}
+            <label className="block text-xs font-bold text-[#1F2D3D] uppercase mb-1">Category</label>
+            <div className="relative">
+              <select 
+                {...register('category')} 
+                className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none appearance-none"
+              >
+                <option value="rent">Rent</option>
+                <option value="bills">Bills</option>
+                <option value="salary">Salary</option>
+                <option value="restocking">Restocking</option>
+                <option value="other">Miscellaneous</option>
+              </select>
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-[#1F2D3D] uppercase mb-1">Online Received (Rs.)</label>
+            <label className="block text-xs font-bold text-[#1F2D3D] uppercase mb-1">Amount (Rs.)</label>
             <input
               type="number"
               step="0.01"
-              {...register('online_amount')}
+              {...register('amount')}
               className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none"
             />
-            {errors.online_amount && <p className="text-xs font-bold text-[#B5482A] mt-1">{errors.online_amount.message}</p>}
+            {errors.amount && <p className="text-xs font-bold text-[#B5482A] mt-1">{errors.amount.message}</p>}
           </div>
 
           <div>
             <label className="block text-xs font-bold text-[#1F2D3D] uppercase mb-1">
-              Total Sale Value <span className="text-xs text-[#6B7785] lowercase">(optional, for udhaar)</span>
+              Note <span className="text-xs text-[#6B7785] lowercase">(optional)</span>
             </label>
-            <input
-              type="number"
-              step="0.01"
-              {...register('total_sale_amount')}
-              className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none"
+            <input 
+              type="text" 
+              {...register('note')} 
+              placeholder="e.g. Electricity bill Jan"
+              className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none" 
             />
-            {errors.total_sale_amount && (
-              <p className="text-xs font-bold text-[#B5482A] mt-1">{errors.total_sale_amount.message}</p>
-            )}
           </div>
 
           <button
@@ -259,23 +246,23 @@ export default function ShopDetail() {
             style={{ boxShadow: '3px 3px 0px 0px #C9974C' }}
             className="w-full bg-[#2F6F4E] text-white font-cabinet font-bold py-3 rounded-lg border-2 border-[#1F2D3D] disabled:opacity-50 mt-4 transition-transform active:translate-y-0.5"
           >
-            {isSubmitting ? 'Saving...' : 'Save Entry'}
+            {isSubmitting ? 'Saving...' : 'Save Expense'}
           </button>
         </form>
 
-        {/* HISTORY LIST CONTAINER */}
+        {/* EXPENSE HISTORY LEDGER */}
         <div 
           style={{ boxShadow: '5px 5px 0px 0px #1F2D3D' }} 
           className="bg-[#FFF8E7] p-6 rounded-xl border-2 border-[#1F2D3D] flex-1 w-full"
         >
-          <div className="flex items-center justify-between border-b-2 border-[#1F2D3D] pb-3 mb-4">
-            <h3 className="font-cabinet font-bold text-lg text-[#1F2D3D] uppercase tracking-wide">Sales History</h3>
+          <div className="flex items-center justify-between border-b-2 border-[#1F2D3D] pb-2 mb-2">
+            <h3 className="font-cabinet font-bold text-lg text-[#1F2D3D] uppercase tracking-wide">Expense History</h3>
             <select
-              value={historyFilter}
-              onChange={(e) => setHistoryFilter(Number(e.target.value))}
+              value={rangeFilter}
+              onChange={(e) => setRangeFilter(Number(e.target.value))}
               className="bg-white border-2 border-[#1F2D3D] rounded-lg p-1.5 font-bold text-xs text-[#1F2D3D] focus:outline-none"
             >
-              {dayFilters.map((f) => (
+              {rangeFilters.map((f) => (
                 <option key={f.value} value={f.value}>
                   {f.label}
                 </option>
@@ -283,25 +270,27 @@ export default function ShopDetail() {
             </select>
           </div>
 
+          <p className="text-xs font-bold uppercase tracking-wider text-[#6B7785] mb-4">
+            Total outflux in range: <span className="text-[#B5482A] font-extrabold text-sm ml-1">Rs. {totalInRange.toLocaleString()}</span>
+          </p>
+
           {!history || history.length === 0 ? (
-            <p className="text-sm font-bold text-[#6B7785] py-4 text-center">No entries recorded in this range.</p>
+            <p className="text-sm font-bold text-[#6B7785] py-4 text-center">No expenses documented in this timeframe.</p>
           ) : (
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {history.map((e) => (
                 <div key={e.id} className="bg-white border-2 border-[#1F2D3D] rounded-lg p-3 shadow-[2px_2px_0px_0px_#1F2D3D]">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold text-[#1F2D3D]">
-                      {new Date(e.entry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    <span className="font-cabinet font-bold text-[#1F2D3D] text-base">
+                      {categoryLabels[e.category] ?? e.category}
                     </span>
-                    <span className="text-[#2F6F4E] font-bold text-base">
-                      Rs. {(Number(e.cash_amount) + Number(e.online_amount)).toLocaleString()}
+                    <span className="text-[#B5482A] font-bold text-base">
+                      Rs. {Number(e.amount).toLocaleString()}
                     </span>
                   </div>
                   <p className="text-xs font-medium text-[#6B7785]">
-                    Cash: <span className="text-[#1F2D3D] font-bold">Rs. {Number(e.cash_amount).toLocaleString()}</span> — Online: <span className="text-[#1F2D3D] font-bold">Rs. {Number(e.online_amount).toLocaleString()}</span>
-                    {e.total_sale_amount && (
-                      <> — Credit total: <span className="text-[#B5482A] font-bold">Rs. {Number(e.total_sale_amount).toLocaleString()}</span></>
-                    )}
+                    {new Date(e.expense_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {e.note && <span className="text-[#1F2D3D] font-bold"> — {e.note}</span>}
                   </p>
                 </div>
               ))}
