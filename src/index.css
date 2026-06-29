@@ -1,7 +1,12 @@
 @import "tailwindcss";
 
+@theme {
+  --font-cabinet: 'Cabinet Grotesk', sans-serif;
+  --font-inter: 'Inter', sans-serif;
+}
+
 :root {
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
