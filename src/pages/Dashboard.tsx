@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { forecastProfit } from '../lib/forecast'
 import logo from '../assets/logo.png'
 
 type Shop = {
@@ -88,6 +89,23 @@ export default function Dashboard() {
         return total > bestTotal ? e : best
       })
     : null
+
+  // Build the combined actual + forecast chart data
+  const profitNumbers = monthlyHistory?.map((m) => Number(m.profit)) ?? []
+  const forecasted = forecastProfit(profitNumbers.slice(-3), 3)
+
+  const profitChartData = [
+    ...(monthlyHistory ?? []).map((m) => ({
+      month: new Date(m.month).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+      actual: Number(m.profit),
+      forecast: null as number | null,
+    })),
+    ...forecasted.map((value, i) => ({
+      month: `+${i + 1}mo`,
+      actual: null as number | null,
+      forecast: value,
+    })),
+  ]
 
   // Brutalist shadow styling fallback rule
   const brutalShadow = { boxShadow: '5px 5px 0px 0px #1F2D3D' }
@@ -247,27 +265,40 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Monthly Profit Trend Line Chart */}
-            {monthlyHistory && monthlyHistory.length > 0 && (
+            {/* Monthly Profit Trend Line Chart — now with forecast */}
+            {profitChartData.length > 0 && (
               <div style={{ boxShadow: '6px 6px 0px 0px #1F2D3D' }} className="bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-6 mb-8">
                 <p className="font-bold text-lg text-[#1F2D3D] mb-4 uppercase tracking-wide">Monthly profit trend</p>
                 <div className="w-full h-[260px] overflow-hidden">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={monthlyHistory.map((m) => ({
-                        month: new Date(m.month).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
-                        profit: Number(m.profit),
-                      }))}
-                      margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
-                    >
+                    <LineChart data={profitChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E2DCD0" />
                       <XAxis dataKey="month" stroke="#1F2D3D" tick={{ fontStyle: 'bold', fontSize: 11 }} />
                       <YAxis stroke="#1F2D3D" tick={{ fontStyle: 'bold', fontSize: 11 }} />
-                      <Tooltip 
+                      <Tooltip
                         contentStyle={{ backgroundColor: '#FFF8E7', border: '2px solid #1F2D3D', borderRadius: '8px', fontWeight: 'bold' }}
-                        formatter={(value) => [`Rs. ${Number(value).toLocaleString()}`, 'Profit']} 
+                        formatter={(value: number, name: string) => [
+                          `Rs. ${Number(value).toLocaleString()}`,
+                          name === 'forecast' ? 'Forecasted Profit' : 'Profit',
+                        ]}
                       />
-                      <Line type="natural" dataKey="profit" stroke="#2F6F4E" strokeWidth={2} dot={{ r: 4, fill: '#1F2D3D' }} />
+                      <Line
+                        type="natural"
+                        dataKey="actual"
+                        stroke="#2F6F4E"
+                        strokeWidth={2}
+                        dot={{ r: 4, fill: '#1F2D3D' }}
+                        connectNulls
+                      />
+                      <Line
+                        type="natural"
+                        dataKey="forecast"
+                        stroke="#2F6F4E"
+                        strokeWidth={2}
+                        strokeDasharray="6 4"
+                        dot={{ r: 4, fill: '#C9974C' }}
+                        connectNulls
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
