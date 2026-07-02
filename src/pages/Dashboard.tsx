@@ -164,13 +164,13 @@ export default function Dashboard() {
             <span className="w-2.5 h-2.5 rounded-full bg-[#2F6F4E] animate-pulse" />
             <span className="text-sm font-bold text-[#1F2D3D] break-all">{user?.email}</span>
           </div>
-          <button
+           <button
             onClick={signOut}
             style={{ boxShadow: '2px 2px 0px 0px #1F2D3D' }}
-            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2"
-          >
+            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2 cursor-pointer"
+            >
             Sign Out
-          </button>
+           </button>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-8">

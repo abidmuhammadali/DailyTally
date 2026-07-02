@@ -64,7 +64,7 @@ export default function Shops() {
         className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-4"
       >
         {/* INTERACTIVE LINK TO DASHBOARD */}
-        <Link to="/dashboard" className="group flex items-center gap-2">
+        <Link to="/dashboard" className="group flex items-center gap-2 cursor-pointer">
           <h1 className="text-2xl font-cabinet font-bold text-[#1F2D3D] tracking-wide transition-colors group-hover:text-[#2F6F4E]">
             DailyTally
           </h1>
@@ -75,10 +75,11 @@ export default function Shops() {
 
         <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
           <span className="text-sm font-bold text-[#1F2D3D] break-all">{user?.email}</span>
+          {/* FIXED: Added cursor-pointer */}
           <button 
             onClick={signOut} 
             style={{ boxShadow: '2px 2px 0px 0px #1F2D3D' }}
-            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2"
+            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2 cursor-pointer transition-colors hover:bg-[#9E3E24]"
           >
             Sign Out
           </button>
@@ -117,10 +118,11 @@ export default function Shops() {
 
             <div>
               <label className="block text-xs font-bold text-[#1F2D3D] uppercase mb-1">Shop Type</label>
+              {/* FIXED: Added cursor-pointer */}
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none appearance-none"
+                className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none cursor-pointer"
               >
                 <option value="general_store">General Store</option>
                 <option value="bakery">Bakery</option>
@@ -128,11 +130,12 @@ export default function Shops() {
               </select>
             </div>
 
+            {/* FIXED: Added cursor-pointer */}
             <button
               type="submit"
               disabled={createShop.isPending}
-              style={{ boxShadow: '3px 3px 0px 0px #C9974C' }}
-              className="w-full bg-[#1F2D3D] text-white font-cabinet font-bold py-3 rounded-lg border-2 border-[#1F2D3D] disabled:opacity-50 mt-2 transition-transform active:translate-y-0.5"
+              style={{ boxShadow: '3px 3px 0px 0px #1F2D3D' }}
+              className="w-full bg-[#2F6F4E] hover:bg-[#25573D] text-white font-cabinet font-bold py-3 rounded-lg border-2 border-[#1F2D3D] disabled:opacity-50 mt-2 transition-transform active:translate-y-0.5 cursor-pointer"
             >
               {createShop.isPending ? 'Creating...' : 'Create Shop'}
             </button>
@@ -153,10 +156,11 @@ export default function Shops() {
           ) : shops && shops.length > 0 ? (
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
               {shops.map((shop) => (
+                /* FIXED: Added cursor-pointer */
                 <Link
                   key={shop.id}
                   to={`/shops/${shop.id}`}
-                  className="block bg-white border-2 border-[#1F2D3D] rounded-lg p-4 shadow-[3px_3px_0px_0px_#1F2D3D] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0px_0px_#1F2D3D] transition-all"
+                  className="block bg-white border-2 border-[#1F2D3D] rounded-lg p-4 shadow-[3px_3px_0px_0px_#1F2D3D] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-[1px_1px_0px_0px_#1F2D3D] transition-all cursor-pointer"
                 >
                   <p className="font-cabinet font-bold text-base text-[#1F2D3D]">{shop.name}</p>
                   <span className="inline-block text-[11px] font-bold tracking-wider text-[#6B7785] uppercase bg-[#E2DCD0] px-2 py-0.5 rounded mt-1.5 capitalize">

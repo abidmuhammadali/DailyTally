@@ -24,7 +24,6 @@ function currentMonthStart() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-// Fixed minor date boundary offset issue
 function monthsAgo(n: number) {
   const d = new Date()
   d.setMonth(d.getMonth() - n)
@@ -115,6 +114,18 @@ export default function ShopExpenses() {
     },
   })
 
+  // NEW: Delete Expense Mutation
+  const deleteExpense = useMutation({
+    mutationFn: async (expenseId: string) => {
+      const { error } = await supabase.from('expenses').delete().eq('id', expenseId)
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses_history', shopId] })
+      await recalcSummary()
+    },
+  })
+
   const totalInRange = history?.reduce((sum, e) => sum + Number(e.amount), 0) ?? 0
 
   return (
@@ -125,8 +136,7 @@ export default function ShopExpenses() {
         style={{ boxShadow: '4px 4px 0px 0px #1F2D3D' }} 
         className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-4"
       >
-        {/* INTERACTIVE LINK TO DASHBOARD */}
-        <Link to="/dashboard" className="group flex items-center gap-2">
+        <Link to="/dashboard" className="group flex items-center gap-2 cursor-pointer">
           <h1 className="text-2xl font-cabinet font-bold text-[#1F2D3D] tracking-wide transition-colors group-hover:text-[#2F6F4E]">
             DailyTally
           </h1>
@@ -140,7 +150,7 @@ export default function ShopExpenses() {
           <button 
             onClick={signOut} 
             style={{ boxShadow: '2px 2px 0px 0px #1F2D3D' }}
-            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2"
+            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2 cursor-pointer transition-colors hover:bg-[#9E3E24]"
           >
             Sign Out
           </button>
@@ -150,7 +160,7 @@ export default function ShopExpenses() {
       {/* SUB-HEADER NAVIGATION */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Link to="/shops" className="text-sm font-bold text-[#1F2D3D] hover:underline inline-flex items-center gap-1 mb-2">
+          <Link to="/shops" className="text-sm font-bold text-[#1F2D3D] hover:underline inline-flex items-center gap-1 mb-2 cursor-pointer">
             ← Back to Shops
           </Link>
           <h2 className="text-2xl font-cabinet font-bold text-[#1F2D3D]">{shop?.name ?? 'Loading...'}</h2>
@@ -158,7 +168,7 @@ export default function ShopExpenses() {
 
         {/* BRUTALIST TAB CONTROLS */}
         <div style={{ boxShadow: '3px 3px 0px 0px #1F2D3D' }} className="inline-flex bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl overflow-hidden self-start">
-          <Link to={`/shops/${shopId}`} className="px-4 py-2 font-cabinet font-bold text-sm text-[#6B7785] bg-[#FFF8E7] hover:bg-[#E2DCD0]">
+          <Link to={`/shops/${shopId}`} className="px-4 py-2 font-cabinet font-bold text-sm text-[#6B7785] bg-[#FFF8E7] hover:bg-[#E2DCD0] cursor-pointer">
             Daily Sales
           </Link>
           <span className="px-4 py-2 font-cabinet font-bold text-sm bg-[#1F2D3D] text-white border-l-2 border-[#1F2D3D]">
@@ -206,7 +216,7 @@ export default function ShopExpenses() {
             <div className="relative">
               <select 
                 {...register('category')} 
-                className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none appearance-none"
+                className="w-full bg-white border-2 border-[#1F2D3D] rounded-lg p-2.5 font-bold text-sm text-[#1F2D3D] focus:outline-none cursor-pointer appearance-none"
               >
                 <option value="rent">Rent</option>
                 <option value="bills">Bills</option>
@@ -243,8 +253,8 @@ export default function ShopExpenses() {
           <button
             type="submit"
             disabled={isSubmitting}
-            style={{ boxShadow: '3px 3px 0px 0px #C9974C' }}
-            className="w-full bg-[#2F6F4E] text-white font-cabinet font-bold py-3 rounded-lg border-2 border-[#1F2D3D] disabled:opacity-50 mt-4 transition-transform active:translate-y-0.5"
+            style={{ boxShadow: '3px 3px 0px 0px #1F2D3D' }}
+            className="w-full bg-[#2F6F4E] hover:bg-[#25573D] text-white font-cabinet font-bold py-3 rounded-lg border-2 border-[#1F2D3D] disabled:opacity-50 mt-4 transition-transform active:translate-y-0.5 cursor-pointer"
           >
             {isSubmitting ? 'Saving...' : 'Save Expense'}
           </button>
@@ -260,7 +270,7 @@ export default function ShopExpenses() {
             <select
               value={rangeFilter}
               onChange={(e) => setRangeFilter(Number(e.target.value))}
-              className="bg-white border-2 border-[#1F2D3D] rounded-lg p-1.5 font-bold text-xs text-[#1F2D3D] focus:outline-none"
+              className="bg-white border-2 border-[#1F2D3D] rounded-lg p-1.5 font-bold text-xs text-[#1F2D3D] focus:outline-none cursor-pointer"
             >
               {rangeFilters.map((f) => (
                 <option key={f.value} value={f.value}>
@@ -279,19 +289,39 @@ export default function ShopExpenses() {
           ) : (
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {history.map((e) => (
-                <div key={e.id} className="bg-white border-2 border-[#1F2D3D] rounded-lg p-3 shadow-[2px_2px_0px_0px_#1F2D3D]">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-cabinet font-bold text-[#1F2D3D] text-base">
-                      {categoryLabels[e.category] ?? e.category}
-                    </span>
+                <div key={e.id} className="bg-white border-2 border-[#1F2D3D] rounded-lg p-3 shadow-[2px_2px_0px_0px_#1F2D3D] flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-cabinet font-bold text-[#1F2D3D] text-base">
+                        {categoryLabels[e.category] ?? e.category}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-[#6B7785] mt-0.5">
+                      {new Date(e.expense_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {e.note && <span className="text-[#1F2D3D] font-bold"> — {e.note}</span>}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className="text-[#B5482A] font-bold text-base">
                       Rs. {Number(e.amount).toLocaleString()}
                     </span>
+                    
+                    {/* TRASH DISPOSAL DELETION CONTROL ACTION */}
+                    <button
+                      onClick={() => {
+                        if (confirm('Are you sure you want to completely remove this expense record?')) {
+                          deleteExpense.mutate(e.id)
+                        }
+                      }}
+                      className="text-[#6B7785] hover:text-[#B5482A] p-1.5 rounded transition-colors cursor-pointer"
+                      title="Delete Entry"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
-                  <p className="text-xs font-medium text-[#6B7785]">
-                    {new Date(e.expense_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    {e.note && <span className="text-[#1F2D3D] font-bold"> — {e.note}</span>}
-                  </p>
                 </div>
               ))}
             </div>

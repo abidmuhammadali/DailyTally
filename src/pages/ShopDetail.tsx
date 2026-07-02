@@ -127,6 +127,18 @@ export default function ShopDetail() {
     },
   })
 
+  // NEW: Delete Daily Entry Mutation 
+  const deleteEntry = useMutation({
+    mutationFn: async (entryId: string) => {
+      const { error } = await supabase.from('daily_entries').delete().eq('id', entryId)
+      if (error) throw error
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['daily_entries_history', shopId] })
+      await recalcSummary()
+    },
+  })
+
   return (
     <div className="min-h-screen bg-[#C9974C] p-6 md:p-10 font-inter">
       
@@ -135,8 +147,8 @@ export default function ShopDetail() {
         style={{ boxShadow: '4px 4px 0px 0px #1F2D3D' }} 
         className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-4"
       >
-        {/* INTERACTIVE LINK TO DASHBOARD */}
-        <Link to="/dashboard" className="group flex items-center gap-2">
+        {/* FIXED: Added cursor-pointer */}
+        <Link to="/dashboard" className="group flex items-center gap-2 cursor-pointer">
           <h1 className="text-2xl font-cabinet font-bold text-[#1F2D3D] tracking-wide transition-colors group-hover:text-[#2F6F4E]">
             DailyTally
           </h1>
@@ -147,10 +159,11 @@ export default function ShopDetail() {
 
         <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
           <span className="text-sm font-bold text-[#1F2D3D] break-all">{user?.email}</span>
+          {/* FIXED: Added cursor-pointer */}
           <button 
             onClick={signOut} 
             style={{ boxShadow: '2px 2px 0px 0px #1F2D3D' }}
-            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2"
+            className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2 cursor-pointer transition-colors hover:bg-[#9E3E24]"
           >
             Sign Out
           </button>
@@ -160,7 +173,8 @@ export default function ShopDetail() {
       {/* SUB-HEADER ACTIONS */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <Link to="/shops" className="text-sm font-bold text-[#1F2D3D] hover:underline inline-flex items-center gap-1 mb-2">
+          {/* FIXED: Added cursor-pointer */}
+          <Link to="/shops" className="text-sm font-bold text-[#1F2D3D] hover:underline inline-flex items-center gap-1 mb-2 cursor-pointer">
             ← Back to Shops
           </Link>
           <h2 className="text-2xl font-cabinet font-bold text-[#1F2D3D]">{shop?.name ?? 'Loading...'}</h2>
@@ -169,7 +183,8 @@ export default function ShopDetail() {
         {/* TAB NAVIGATION SELECTORS */}
         <div style={{ boxShadow: '3px 3px 0px 0px #1F2D3D' }} className="inline-flex bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl overflow-hidden self-start">
           <span className="px-4 py-2 font-cabinet font-bold text-sm bg-[#1F2D3D] text-white">Daily Sales</span>
-          <Link to={`/shops/${shopId}/expenses`} className="px-4 py-2 font-cabinet font-bold text-sm text-[#6B7785] bg-[#FFF8E7] border-l-2 border-[#1F2D3D] hover:bg-[#E2DCD0]">
+          {/* FIXED: Added cursor-pointer */}
+          <Link to={`/shops/${shopId}/expenses`} className="px-4 py-2 font-cabinet font-bold text-sm text-[#6B7785] bg-[#FFF8E7] border-l-2 border-[#1F2D3D] hover:bg-[#E2DCD0] cursor-pointer">
             Expenses
           </Link>
         </div>
@@ -253,11 +268,12 @@ export default function ShopDetail() {
             )}
           </div>
 
+          {/* FIXED: Added cursor-pointer */}
           <button
             type="submit"
             disabled={isSubmitting}
-            style={{ boxShadow: '3px 3px 0px 0px #C9974C' }}
-            className="w-full bg-[#2F6F4E] text-white font-cabinet font-bold py-3 rounded-lg border-2 border-[#1F2D3D] disabled:opacity-50 mt-4 transition-transform active:translate-y-0.5"
+            style={{ boxShadow: '3px 3px 0px 0px #1F2D3D' }}
+            className="w-full bg-[#2F6F4E] hover:bg-[#25573D] text-white font-cabinet font-bold py-3 rounded-lg border-2 border-[#1F2D3D] disabled:opacity-50 mt-4 transition-transform active:translate-y-0.5 cursor-pointer"
           >
             {isSubmitting ? 'Saving...' : 'Save Entry'}
           </button>
@@ -270,10 +286,11 @@ export default function ShopDetail() {
         >
           <div className="flex items-center justify-between border-b-2 border-[#1F2D3D] pb-3 mb-4">
             <h3 className="font-cabinet font-bold text-lg text-[#1F2D3D] uppercase tracking-wide">Sales History</h3>
+            {/* FIXED: Added cursor-pointer */}
             <select
               value={historyFilter}
               onChange={(e) => setHistoryFilter(Number(e.target.value))}
-              className="bg-white border-2 border-[#1F2D3D] rounded-lg p-1.5 font-bold text-xs text-[#1F2D3D] focus:outline-none"
+              className="bg-white border-2 border-[#1F2D3D] rounded-lg p-1.5 font-bold text-xs text-[#1F2D3D] focus:outline-none cursor-pointer"
             >
               {dayFilters.map((f) => (
                 <option key={f.value} value={f.value}>
@@ -288,21 +305,41 @@ export default function ShopDetail() {
           ) : (
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {history.map((e) => (
-                <div key={e.id} className="bg-white border-2 border-[#1F2D3D] rounded-lg p-3 shadow-[2px_2px_0px_0px_#1F2D3D]">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold text-[#1F2D3D]">
-                      {new Date(e.entry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
+                <div key={e.id} className="bg-white border-2 border-[#1F2D3D] rounded-lg p-3 shadow-[2px_2px_0px_0px_#1F2D3D] flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-bold text-[#1F2D3D]">
+                        {new Date(e.entry_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-[#6B7785]">
+                      Cash: <span className="text-[#1F2D3D] font-bold">Rs. {Number(e.cash_amount).toLocaleString()}</span> — Online: <span className="text-[#1F2D3D] font-bold">Rs. {Number(e.online_amount).toLocaleString()}</span>
+                      {e.total_sale_amount && (
+                        <> — Credit total: <span className="text-[#B5482A] font-bold">Rs. {Number(e.total_sale_amount).toLocaleString()}</span></>
+                      )}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
                     <span className="text-[#2F6F4E] font-bold text-base">
                       Rs. {(Number(e.cash_amount) + Number(e.online_amount)).toLocaleString()}
                     </span>
+
+                    {/* NEW: Inline Delete Entry Button Controls */}
+                    <button
+                      onClick={() => {
+                        if (confirm('Are you sure you want to completely delete this sales entry record?')) {
+                          deleteEntry.mutate(e.id)
+                        }
+                      }}
+                      className="text-[#6B7785] hover:text-[#B5482A] p-1.5 rounded transition-colors cursor-pointer"
+                      title="Delete Entry"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
-                  <p className="text-xs font-medium text-[#6B7785]">
-                    Cash: <span className="text-[#1F2D3D] font-bold">Rs. {Number(e.cash_amount).toLocaleString()}</span> — Online: <span className="text-[#1F2D3D] font-bold">Rs. {Number(e.online_amount).toLocaleString()}</span>
-                    {e.total_sale_amount && (
-                      <> — Credit total: <span className="text-[#B5482A] font-bold">Rs. {Number(e.total_sale_amount).toLocaleString()}</span></>
-                    )}
-                  </p>
                 </div>
               ))}
             </div>
