@@ -7,6 +7,7 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
+import { forecastProfit } from '../lib/forecast'
 import logo from '../assets/logo.png'
 
 type Shop = {
@@ -89,12 +90,41 @@ export default function Dashboard() {
       })
     : null
 
-  // Brutalist shadow styling fallback rule
+  // 1. Send ALL recorded historical data points to the calculator module
+  const profitNumbers = monthlyHistory?.map((m) => Number(m.profit)) ?? []
+  const forecasted = forecastProfit(profitNumbers, 3)
+
+  const historyArray = monthlyHistory ?? []
+
+  // 2. Build a unified chronological timeline
+  const profitChartData = [
+    ...historyArray.map((m, idx) => ({
+      month: new Date(m.month).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+      actual: Number(m.profit),
+      // Bridge: The final active month connects to the starting point of the forecast line
+      forecast: idx === historyArray.length - 1 ? Number(m.profit) : null,
+    })),
+    ...forecasted.map((value, i) => {
+      // Find the absolute latest record month in your history array to project from
+      const lastHistoryMonthStr = historyArray[historyArray.length - 1]?.month || currentMonthStart()
+      const targetDate = new Date(lastHistoryMonthStr)
+      
+      targetDate.setDate(1) // Prevent accidental calendar date overflows
+      targetDate.setMonth(targetDate.getMonth() + (i + 1))
+
+      return {
+        month: targetDate.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+        actual: null,
+        forecast: value,
+      }
+    }),
+  ]
+
   const brutalShadow = { boxShadow: '5px 5px 0px 0px #1F2D3D' }
 
   return (
     <div className="min-h-screen bg-[#C9974C] w-full flex flex-col md:flex-row">
-      
+
       {/* LEFT SIDE PANEL */}
       <div className="w-full md:w-1/3 bg-[#1F2D3D] text-white flex flex-col justify-between p-10 relative overflow-hidden md:sticky md:top-0 md:h-screen">
         <svg className="absolute top-10 right-12 w-14 h-14 opacity-40 rotate-[8deg]" viewBox="0 0 60 60" fill="none" stroke="#C9D3DC" strokeWidth="2.5">
@@ -115,7 +145,7 @@ export default function Dashboard() {
         <div className="my-auto max-w-xs">
           <h2 className="text-2xl font-bold text-[#C9974C] mb-4">Insights & Analysis</h2>
           <p className="text-[#C9D3DC] text-sm leading-relaxed">
-            DailyTally is your essential digital ledger, reimagining old-school record-keeping with modern efficiency. 
+            DailyTally is your essential digital ledger, reimagining old-school record-keeping with modern efficiency.
             Stop guessing. Start tallying. Your digital record, our analog charm.
           </p>
           <p className="text-xs font-bold tracking-widest text-[#C9974C] mt-6">
@@ -130,15 +160,14 @@ export default function Dashboard() {
 
       {/* RIGHT SIDE PANEL */}
       <div className="flex-1 bg-[#C9974C] p-6 md:p-10">
-        
-        {/* Navigation / User Bar */}
+
         <div style={{ boxShadow: '4px 4px 0px 0px #1F2D3D' }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-4">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#2F6F4E] animate-pulse" />
             <span className="text-sm font-bold text-[#1F2D3D] break-all">{user?.email}</span>
           </div>
-          <button 
-            onClick={signOut} 
+          <button
+            onClick={signOut}
             style={{ boxShadow: '2px 2px 0px 0px #1F2D3D' }}
             className="bg-[#B5482A] text-white border-2 border-[#1F2D3D] font-bold text-xs uppercase tracking-wider rounded-lg px-4 py-2"
           >
@@ -146,10 +175,9 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* Actions Row */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-8">
-          <Link 
-            to="/shops" 
+          <Link
+            to="/shops"
             style={{ boxShadow: '4px 4px 0px 0px #1F2D3D' }}
             className="inline-flex justify-center items-center bg-[#2F6F4E] text-white border-2 border-[#1F2D3D] rounded-xl px-6 py-3 font-bold text-sm"
           >
@@ -183,7 +211,6 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
-            {/* 3-Column Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
               <div style={brutalShadow} className="bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-5">
                 <p className="text-xs font-bold uppercase tracking-wider text-[#6B7785] mb-2">This month's revenue</p>
@@ -207,7 +234,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Best Day Card */}
             {bestDay && (
               <div style={brutalShadow} className="bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-5 mb-8 max-w-md">
                 <p className="text-xs font-bold uppercase tracking-wider text-[#6B7785] mb-2">Best-selling day this month</p>
@@ -220,7 +246,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Bar Chart */}
             {entries && entries.length > 0 && (
               <div style={{ boxShadow: '6px 6px 0px 0px #1F2D3D' }} className="bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-6 mb-8">
                 <p className="font-bold text-lg text-[#1F2D3D] mb-4 uppercase tracking-wide">Daily sales this month</p>
@@ -236,9 +261,9 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#E2DCD0" />
                       <XAxis dataKey="day" stroke="#1F2D3D" tick={{ fontStyle: 'bold', fontSize: 11 }} />
                       <YAxis stroke="#1F2D3D" tick={{ fontStyle: 'bold', fontSize: 11 }} />
-                      <Tooltip 
+                      <Tooltip
                         contentStyle={{ backgroundColor: '#FFF8E7', border: '2px solid #1F2D3D', borderRadius: '8px', fontWeight: 'bold' }}
-                        formatter={(value) => [`Rs. ${Number(value).toLocaleString()}`, 'Total Revenue']} 
+                        formatter={(value) => [`Rs. ${Number(value).toLocaleString()}`, 'Total Revenue']}
                       />
                       <Bar dataKey="total" fill="#1F2D3D" radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -247,35 +272,41 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Monthly Profit Trend Line Chart */}
-            {monthlyHistory && monthlyHistory.length > 0 && (
+            {/* Line Chart Configured for Continuous Timelines */}
+            {profitChartData.length > 0 && (
               <div style={{ boxShadow: '6px 6px 0px 0px #1F2D3D' }} className="bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-6 mb-8">
                 <p className="font-bold text-lg text-[#1F2D3D] mb-4 uppercase tracking-wide">Monthly profit trend</p>
                 <div className="w-full h-[260px] overflow-hidden">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={monthlyHistory.map((m) => ({
-                        month: new Date(m.month).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
-                        profit: Number(m.profit),
-                      }))}
-                      margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
-                    >
+                    <LineChart data={profitChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E2DCD0" />
                       <XAxis dataKey="month" stroke="#1F2D3D" tick={{ fontStyle: 'bold', fontSize: 11 }} />
                       <YAxis stroke="#1F2D3D" tick={{ fontStyle: 'bold', fontSize: 11 }} />
-                      <Tooltip 
+                      <Tooltip
                         contentStyle={{ backgroundColor: '#FFF8E7', border: '2px solid #1F2D3D', borderRadius: '8px', fontWeight: 'bold' }}
-                        formatter={(value) => [`Rs. ${Number(value).toLocaleString()}`, 'Profit']} 
+                        formatter={(value, name) => [
+                          `Rs. ${Number(value).toLocaleString()}`,
+                          name === 'forecast' ? 'Forecasted Profit' : 'Profit',
+                        ]}
                       />
-                      <Line type="natural" dataKey="profit" stroke="#2F6F4E" strokeWidth={2} dot={{ r: 4, fill: '#1F2D3D' }} />
-                         <Tooltip
-                          contentStyle={{ backgroundColor: '#FFF8E7', border: '2px solid #1F2D3D', borderRadius: '8px', fontWeight: 'bold' }}
-                           formatter={(value, name) => [
-                            `Rs. ${Number(value).toLocaleString()}`,
-                             name === 'forecast' ? 'Forecasted Profit' : 'Profit',
-                           ]}
-                          /> 
-                       </LineChart>
+                      <Line
+                        type="monotone"
+                        dataKey="actual"
+                        stroke="#2F6F4E"
+                        strokeWidth={2}
+                        dot={{ r: 4, fill: '#1F2D3D' }}
+                        connectNulls
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="forecast"
+                        stroke="#2F6F4E"
+                        strokeWidth={2}
+                        strokeDasharray="6 4"
+                        dot={{ r: 4, fill: '#C9974C' }}
+                        connectNulls
+                      />
+                    </LineChart>
                   </ResponsiveContainer>
                 </div>
               </div>
