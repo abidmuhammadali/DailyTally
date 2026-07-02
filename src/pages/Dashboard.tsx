@@ -90,26 +90,24 @@ export default function Dashboard() {
       })
     : null
 
-  // 1. Send ALL recorded historical data points to the calculator module
-  const profitNumbers = monthlyHistory?.map((m) => Number(m.profit)) ?? []
+  const historyArray = monthlyHistory ?? []
+  const profitNumbers = historyArray.map((m) => Number(m.profit)) ?? []
+  
+  // Send metrics to your forecast engine
   const forecasted = forecastProfit(profitNumbers, 3)
 
-  const historyArray = monthlyHistory ?? []
-
-  // 2. Build a unified chronological timeline
+  // Build sequential data map for Recharts
   const profitChartData = [
     ...historyArray.map((m, idx) => ({
       month: new Date(m.month).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
       actual: Number(m.profit),
-      // Bridge: The final active month connects to the starting point of the forecast line
       forecast: idx === historyArray.length - 1 ? Number(m.profit) : null,
     })),
     ...forecasted.map((value, i) => {
-      // Find the absolute latest record month in your history array to project from
       const lastHistoryMonthStr = historyArray[historyArray.length - 1]?.month || currentMonthStart()
       const targetDate = new Date(lastHistoryMonthStr)
       
-      targetDate.setDate(1) // Prevent accidental calendar date overflows
+      targetDate.setDate(1)
       targetDate.setMonth(targetDate.getMonth() + (i + 1))
 
       return {
@@ -272,7 +270,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Line Chart Configured for Continuous Timelines */}
+            {/* Line Chart Section */}
             {profitChartData.length > 0 && (
               <div style={{ boxShadow: '6px 6px 0px 0px #1F2D3D' }} className="bg-[#FFF8E7] border-2 border-[#1F2D3D] rounded-xl p-6 mb-8">
                 <p className="font-bold text-lg text-[#1F2D3D] mb-4 uppercase tracking-wide">Monthly profit trend</p>
@@ -309,6 +307,17 @@ export default function Dashboard() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* NEW DISCLAIMER TEXT BLOCK */}
+                <div className="mt-4 pt-3 border-t-2 border-dashed border-[#E2DCD0] flex items-start gap-2 text-[#6B7785]">
+                  <span className="text-xs font-bold uppercase px-1.5 py-0.5 bg-[#C9974C] text-[#1F2D3D] rounded border border-[#1F2D3D] tracking-wider whitespace-nowrap">
+                    Note
+                  </span>
+                  <p className="text-xs font-semibold leading-relaxed">
+                    Dashed lines indicate machine-generated trend projections. Dynamic algorithms weight recent months heavily to match immediate shifts, and forecasting stability scales accurately once a shop builds 6 to 8 months of solid history.
+                  </p>
+                </div>
+
               </div>
             )}
           </>

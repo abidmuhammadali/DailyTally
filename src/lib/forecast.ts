@@ -8,7 +8,17 @@ export function forecastProfit(recentMonths: number[], monthsAhead: number): num
     changes.push(recentMonths[i] - recentMonths[i - 1])
   }
 
-  const averageChange = changes.reduce((sum, c) => sum + c, 0) / changes.length
+  // Calculate a weighted average where later changes (recent metrics) get significantly higher importance
+  let totalWeight = 0
+  let weightedSum = 0
+
+  for (let i = 0; i < changes.length; i++) {
+    const weight = i + 1 // The closer to the present day, the higher the weight index value
+    weightedSum += changes[i] * weight
+    totalWeight += weight
+  }
+
+  const averageChange = weightedSum / totalWeight
 
   const forecast: number[] = []
   let lastValue = recentMonths[recentMonths.length - 1]
